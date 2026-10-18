@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>スマートキッチン - 食材＆買い物リスト</title>
+
+    <!-- PWA & Mobile Optimization Tags -->
+    <meta name="theme-color" content="#10b981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="スマートキッチン">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3082/3082060.png">
+    
+    <!-- Embedded Manifest JSON for Web Hosting Installability -->
+    <link rel="manifest" href='data:application/json,{"name":"スマートキッチン","short_name":"スマートキッチン","description":"食材管理＆買い物メモアプリ","start_url":".","display":"standalone","background_color":"#f4f7f6","theme_color":"#10b981","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/3082/3082060.png","sizes":"512x512","type":"image/png"}]}'>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        emerald: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f7f6;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tab-btn.active {
+            border-bottom: 3px solid #10b981;
+            color: #059669;
+            font-weight: 600;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="text-slate-700 pb-12 min-h-screen select-none">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-full shadow-lg transition-all duration-300 opacity-0 pointer-events-none flex items-center space-x-2">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+        <span id="toast-message">メッセージ</span>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <div class="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-200">
+                    <i class="fa-solid fa-utensils text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-800 leading-tight">スマートキッチン</h1>
+                    <p class="text-xs text-slate-400">食材管理＆買い物メモ</p>
+                </div>
+            </div>
+            <!-- Help / Install Guide Button -->
+            <button onclick="openInstallModal()" class="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-1.5 rounded-full font-medium border border-emerald-200/60 transition-colors flex items-center space-x-1">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+                <span>アプリ化</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto px-4 pt-4 space-y-4">
+
+        <!-- ⚠️ 期限が近い食材通知エリア -->
+        <section id="expiring-section" class="hidden animate-fade-in">
+            <div class="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 shadow-sm">
+                <div class="flex items-center space-x-2 text-amber-800 font-bold text-sm mb-2.5">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-200 text-amber-800 text-xs">⚠️</span>
+                    <span>期限が近い食材（3日以内 / 期限切れ）</span>
+                </div>
+                <ul id="expiring-list" class="space-y-2">
+                    <!-- Dynamic rendering -->
+                </ul>
+            </div>
+        </section>
+
+        <!-- タブ切り替えボタン -->
+        <div class="bg-white rounded-xl shadow-sm p-1 flex border border-slate-200/80">
+            <button id="tab-pantry-btn" onclick="switchTab('pantry')" class="tab-btn active flex-1 py-2 text-center text-sm font-medium transition-all rounded-lg flex items-center justify-center space-x-1.5">
+                <i class="fa-solid fa-box-archive text-xs"></i>
+                <span>冷蔵庫・パントリー</span>
+            </button>
+            <button id="tab-shopping-btn" onclick="switchTab('shopping')" class="tab-btn flex-1 py-2 text-center text-sm font-medium transition-all text-slate-500 hover:text-slate-700 rounded-lg flex items-center justify-center space-x-1.5">
+                <i class="fa-solid fa-cart-shopping text-xs"></i>
+                <span>買い物リスト</span>
+                <span id="shopping-badge" class="hidden ml-1 px-1.5 py-0.5 text-xs bg-emerald-500 text-white rounded-full leading-none font-bold">0</span>
+            </button>
+        </div>
+
+        <!-- TAB 1: 食材管理 VIEW -->
+        <div id="pantry-view" class="space-y-4">
+            <!-- 食材登録フォーム -->
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center">
+                    <i class="fa-solid fa-plus-circle mr-1.5 text-emerald-500"></i>新しい食材を登録
+                </h2>
+                <form id="add-food-form" onsubmit="handleAddFood(event)" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">食材名 <span class="text-red-500">*</span></label>
+                        <input type="text" id="food-name" required placeholder="例: たまご、牛乳、キャベツ" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all select-text">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">数量</label>
+                            <input type="text" id="food-quantity" placeholder="例: 1パック, 200g" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all select-text">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">賞味期限 <span class="text-red-500">*</span></label>
+                            <input type="date" id="food-expiry" required class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-medium py-2.5 px-4 rounded-xl shadow-md shadow-emerald-600/20 transition-all text-sm flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-circle-plus"></i>
+                        <span>食材を追加する</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- 食材一覧 -->
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
+                        <i class="fa-solid fa-list-ul mr-1.5 text-emerald-500"></i>家にある食材
+                    </h2>
+                    <span id="food-count" class="text-xs font-medium text-slate-400">0件</span>
+                </div>
+                
+                <div id="pantry-empty" class="text-center py-8 text-slate-400 space-y-2">
+                    <i class="fa-solid fa-basket-shopping text-3xl text-slate-300"></i>
+                    <p class="text-xs">登録されている食材はありません。<br>上のフォームから追加してください。</p>
+                </div>
+
+                <ul id="pantry-list" class="divide-y divide-slate-100">
+                    <!-- Dynamic rendering -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- TAB 2: 買い物リスト VIEW -->
+        <div id="shopping-view" class="space-y-4 hidden">
+            <!-- 買い物追加フォーム & LINE共有ボタン -->
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 space-y-3">
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
+                    <i class="fa-solid fa-cart-plus mr-1.5 text-emerald-500"></i>買い物アイテムの追加
+                </h2>
+                <form id="add-shopping-form" onsubmit="handleAddShopping(event)" class="flex space-x-2">
+                    <input type="text" id="shopping-item-input" placeholder="例: 牛乳、醤油、洗剤" required class="flex-1 px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all select-text">
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-medium px-4 py-2 rounded-xl shadow-md shadow-emerald-600/20 transition-all text-sm whitespace-nowrap">
+                        追加
+                    </button>
+                </form>
+
+                <hr class="border-slate-100 my-2">
+
+                <!-- LINE共有ボタン -->
+                <button onclick="copyUncheckedItems()" class="w-full bg-[#06C755] hover:bg-[#05b34c] active:scale-[0.99] text-white font-medium py-2.5 px-4 rounded-xl shadow-md shadow-green-600/20 transition-all text-sm flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-share-nodes text-base"></i>
+                    <span>食材・買い物リストを共有（コピー）</span>
+                </button>
+            </div>
+
+            <!-- 買い物リスト -->
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
+                            <i class="fa-solid fa-square-check mr-1.5 text-emerald-500"></i>買い物メモ
+                        </h2>
+                        <p class="text-[11px] text-slate-400 mt-0.5">※チェックを入れたアイテムはコピーされません</p>
+                    </div>
+                    <button onclick="clearCheckedShoppingItems()" class="text-xs text-slate-400 hover:text-red-500 transition-colors">
+                        チェック済を消去
+                    </button>
+                </div>
+
+                <div id="shopping-empty" class="text-center py-8 text-slate-400 space-y-2">
+                    <i class="fa-solid fa-clipboard-list text-3xl text-slate-300"></i>
+                    <p class="text-xs">買い物リストは空です。<br>新しいアイテムを追加してみましょう！</p>
+                </div>
+
+                <ul id="shopping-list" class="divide-y divide-slate-100">
+                    <!-- Dynamic rendering -->
+                </ul>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 食材編集モーダル -->
+    <div id="edit-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
+        <div class="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl space-y-4 transform transition-all duration-200 scale-95" id="edit-modal-content">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center">
+                    <i class="fa-solid fa-pen-to-square text-emerald-500 mr-2"></i>食材情報の編集
+                </h3>
+                <button onclick="closeEditModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="edit-food-form" onsubmit="handleSaveEditFood(event)" class="space-y-3">
+                <input type="hidden" id="edit-food-id">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">食材名 <span class="text-red-500">*</span></label>
+                    <input type="text" id="edit-food-name" required class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all select-text">
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">数量</label>
+                        <input type="text" id="edit-food-quantity" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all select-text">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">賞味期限 <span class="text-red-500">*</span></label>
+                        <input type="date" id="edit-food-expiry" required class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all">
+                    </div>
+                </div>
+                <div class="flex space-x-2 pt-2">
+                    <button type="button" onclick="closeEditModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium rounded-xl text-sm transition-all">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl shadow-md shadow-emerald-600/20 text-sm transition-all">
+                        更新する
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- スマホアプリ化ガイド モーダル -->
+    <div id="install-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
+        <div class="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl space-y-4 transform transition-all duration-200 scale-95" id="install-modal-content">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center">
+                    <i class="fa-solid fa-mobile-screen text-emerald-500 mr-2"></i>スマホのアプリとして使う方法
+                </h3>
+                <button onclick="closeInstallModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3 text-xs text-slate-600 leading-relaxed">
+                <p class="font-semibold text-slate-800">Web上にアップロード後、スマホのホーム画面に追加すると全画面アプリとして使えます！</p>
+                
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                    <span class="font-bold text-slate-800 block flex items-center">
+                        <i class="fa-brands fa-apple text-slate-700 mr-1.5 text-sm"></i>iPhone (Safari)
+                    </span>
+                    <ol class="list-decimal list-inside space-y-1 text-slate-500">
+                        <li>Safariで共有ボタン「<i class="fa-solid fa-arrow-up-from-bracket"></i>」をタップ</li>
+                        <li>「<b>ホーム画面に追加</b>」を選択</li>
+                    </ol>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                    <span class="font-bold text-slate-800 block flex items-center">
+                        <i class="fa-brands fa-android text-emerald-600 mr-1.5 text-sm"></i>Android (Chrome)
+                    </span>
+                    <ol class="list-decimal list-inside space-y-1 text-slate-500">
+                        <li>右上メニュー「<i class="fa-solid fa-ellipsis-vertical"></i>」をタップ</li>
+                        <li>「<b>ホーム画面に追加</b>」または「<b>アプリをインストール</b>」を選択</li>
+                    </ol>
+                </div>
+            </div>
+
+            <button onclick="closeInstallModal()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl shadow-md text-sm transition-all">
+                とじる
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Data State
+        let foods = [];
+        let shoppingItems = [];
+
+        // Application Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            loadStorage();
+            setDefaultExpiryDate();
+            renderAll();
+        });
+
+        // LocalStorage Helpers
+        function loadStorage() {
+            try {
+                const savedFoods = localStorage.getItem('smart_kitchen_foods');
+                foods = savedFoods ? JSON.parse(savedFoods) : [];
+
+                const savedShopping = localStorage.getItem('smart_kitchen_shopping');
+                shoppingItems = savedShopping ? JSON.parse(savedShopping) : [];
+            } catch(e) {
+                console.error('Failed to load LocalStorage:', e);
+                foods = [];
+                shoppingItems = [];
+            }
+        }
+
+        function saveFoods() {
+            localStorage.setItem('smart_kitchen_foods', JSON.stringify(foods));
+        }
+
+        function saveShopping() {
+            localStorage.setItem('smart_kitchen_shopping', JSON.stringify(shoppingItems));
+        }
+
+        function setDefaultExpiryDate() {
+            const today = new Date();
+            today.setDate(today.getDate() + 3);
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const defaultDate = `${yyyy}-${mm}-${dd}`;
+            const expiryInput = document.getElementById('food-expiry');
+            if (expiryInput) expiryInput.value = defaultDate;
+        }
+
+        // Tab Switcher Function
+        function switchTab(tab) {
+            const pantryView = document.getElementById('pantry-view');
+            const shoppingView = document.getElementById('shopping-view');
+            const pantryBtn = document.getElementById('tab-pantry-btn');
+            const shoppingBtn = document.getElementById('tab-shopping-btn');
+
+            if (tab === 'pantry') {
+                pantryView.classList.remove('hidden');
+                shoppingView.classList.add('hidden');
+                pantryBtn.classList.add('active');
+                shoppingBtn.classList.remove('active');
+                shoppingBtn.classList.add('text-slate-500');
+            } else {
+                pantryView.classList.add('hidden');
+                shoppingView.classList.remove('hidden');
+                shoppingBtn.classList.add('active');
+                shoppingBtn.classList.remove('text-slate-500');
+                pantryBtn.classList.remove('active');
+                pantryBtn.classList.add('text-slate-500');
+            }
+        }
+
+        // Toast Notification System
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            toastMsg.textContent = msg;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            toast.classList.add('opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+        // Days Remaining Calculation Helper
+        function getDaysRemaining(expiryStr) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const [y, m, d] = expiryStr.split('-').map(Number);
+            const expiryDate = new Date(y, m - 1, d);
+            expiryDate.setHours(0, 0, 0, 0);
+
+            const diffTime = expiryDate - today;
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        // Food Actions
+        function handleAddFood(e) {
+            e.preventDefault();
+            const nameInput = document.getElementById('food-name');
+            const qtyInput = document.getElementById('food-quantity');
+            const expiryInput = document.getElementById('food-expiry');
+
+            const name = nameInput.value.trim();
+            const quantity = qtyInput.value.trim();
+            const expiry = expiryInput.value;
+
+            if (!name || !expiry) return;
+
+            const newFood = {
+                id: Date.now().toString(),
+                name,
+                quantity,
+                expiry
+            };
+
+            foods.push(newFood);
+            saveFoods();
+
+            nameInput.value = '';
+            qtyInput.value = '';
+            setDefaultExpiryDate();
+
+            renderAll();
+            showToast(`「${name}」を追加しました`);
+        }
+
+        function deleteFood(id) {
+            foods = foods.filter(item => item.id !== id);
+            saveFoods();
+            renderAll();
+            showToast('食材を削除しました');
+        }
+
+        // Food Edit Functions
+        function openEditModal(id) {
+            const food = foods.find(f => f.id === id);
+            if (!food) return;
+
+            document.getElementById('edit-food-id').value = food.id;
+            document.getElementById('edit-food-name').value = food.name;
+            document.getElementById('edit-food-quantity').value = food.quantity || '';
+            document.getElementById('edit-food-expiry').value = food.expiry;
+
+            const modal = document.getElementById('edit-modal');
+            const modalContent = document.getElementById('edit-modal-content');
+
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.add('opacity-100');
+            modalContent.classList.remove('scale-95');
+            modalContent.classList.add('scale-100');
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('edit-modal');
+            const modalContent = document.getElementById('edit-modal-content');
+
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+        }
+
+        function handleSaveEditFood(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-food-id').value;
+            const name = document.getElementById('edit-food-name').value.trim();
+            const quantity = document.getElementById('edit-food-quantity').value.trim();
+            const expiry = document.getElementById('edit-food-expiry').value;
+
+            if (!name || !expiry) return;
+
+            foods = foods.map(f => {
+                if (f.id === id) {
+                    return { ...f, name, quantity, expiry };
+                }
+                return f;
+            });
+
+            saveFoods();
+            closeEditModal();
+            renderAll();
+            showToast(`「${name}」の情報を更新しました`);
+        }
+
+        // Install Modal Controls
+        function openInstallModal() {
+            const modal = document.getElementById('install-modal');
+            const modalContent = document.getElementById('install-modal-content');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.add('opacity-100');
+            modalContent.classList.remove('scale-95');
+            modalContent.classList.add('scale-100');
+        }
+
+        function closeInstallModal() {
+            const modal = document.getElementById('install-modal');
+            const modalContent = document.getElementById('install-modal-content');
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+        }
+
+        // Shopping Actions
+        function handleAddShopping(e) {
+            e.preventDefault();
+            const input = document.getElementById('shopping-item-input');
+            const name = input.value.trim();
+
+            if (!name) return;
+
+            const newItem = {
+                id: Date.now().toString(),
+                name,
+                checked: false
+            };
+
+            shoppingItems.push(newItem);
+            saveShopping();
+
+            input.value = '';
+            renderAll();
+            showToast(`「${name}」を買い物リストに追加しました`);
+        }
+
+        function toggleShoppingItem(id) {
+            shoppingItems = shoppingItems.map(item => {
+                if (item.id === id) {
+                    return { ...item, checked: !item.checked };
+                }
+                return item;
+            });
+            saveShopping();
+            renderAll();
+        }
+
+        function deleteShoppingItem(id) {
+            shoppingItems = shoppingItems.filter(item => item.id !== id);
+            saveShopping();
+            renderAll();
+        }
+
+        function clearCheckedShoppingItems() {
+            const count = shoppingItems.filter(i => i.checked).length;
+            if (count === 0) {
+                showToast('チェック済みのアイテムはありません');
+                return;
+            }
+            shoppingItems = shoppingItems.filter(i => !i.checked);
+            saveShopping();
+            renderAll();
+            showToast('チェック済みのアイテムを削除しました');
+        }
+
+        // LINE Share / Copy Logic
+        function copyUncheckedItems() {
+            const uncheckedShopping = shoppingItems.filter(i => !i.checked);
+            const sortedFoods = [...foods].sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+            
+            const expiringFoods = sortedFoods.filter(food => getDaysRemaining(food.expiry) <= 3);
+            const normalFoods = sortedFoods.filter(food => getDaysRemaining(food.expiry) > 3);
+
+            let shareText = '';
+
+            // 1st Section: 買い物リスト
+            shareText += '【🛒 買い物リスト】\n';
+            if (uncheckedShopping.length > 0) {
+                uncheckedShopping.forEach(item => {
+                    shareText += `・${item.name}\n`;
+                });
+            } else {
+                shareText += '（買いたいものはありません）\n';
+            }
+
+            // 2nd Section: 期限切れ・間近の食材
+            shareText += '\n【⚠️ 期限切れ・間近の食材】\n';
+            if (expiringFoods.length > 0) {
+                expiringFoods.forEach(food => {
+                    const days = getDaysRemaining(food.expiry);
+                    let diffText = '';
+                    if (days < 0) {
+                        diffText = `期限切れ (${Math.abs(days)}日前)`;
+                    } else if (days === 0) {
+                        diffText = '今日が期限！';
+                    } else {
+                        diffText = `あと${days}日`;
+                    }
+                    const qtyStr = food.quantity ? ` (${food.quantity})` : '';
+                    shareText += `・${food.name}${qtyStr} - ${diffText}\n`;
+                });
+            } else {
+                shareText += '（対象の食材はありません）\n';
+            }
+
+            // 3rd Section: 家にある食材
+            shareText += '\n【🌱 家にある食材】\n';
+            if (normalFoods.length > 0) {
+                normalFoods.forEach(food => {
+                    const days = getDaysRemaining(food.expiry);
+                    const qtyStr = food.quantity ? ` (${food.quantity})` : '';
+                    shareText += `・${food.name}${qtyStr} - ${food.expiry} (あと${days}日)\n`;
+                });
+            } else {
+                shareText += '（その他の登録食材はありません）\n';
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shareText).then(() => {
+                    showToast('LINE用にコピーしました！貼り付けて共有できます');
+                }).catch(() => {
+                    fallbackCopyText(shareText);
+                });
+            } else {
+                fallbackCopyText(shareText);
+            }
+        }
+
+        function fallbackCopyText(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast('LINE用にコピーしました！貼り付けて共有できます');
+            } catch (err) {
+                showToast('コピーに失敗しました');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // Rendering Engine
+        function renderAll() {
+            renderPantry();
+            renderExpiringAlerts();
+            renderShopping();
+        }
+
+        function renderPantry() {
+            const pantryList = document.getElementById('pantry-list');
+            const pantryEmpty = document.getElementById('pantry-empty');
+            const foodCount = document.getElementById('food-count');
+
+            foodCount.textContent = `${foods.length}件`;
+
+            if (foods.length === 0) {
+                pantryEmpty.classList.remove('hidden');
+                pantryList.innerHTML = '';
+                return;
+            }
+
+            pantryEmpty.classList.add('hidden');
+
+            const sorted = [...foods].sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+
+            pantryList.innerHTML = sorted.map(food => {
+                const days = getDaysRemaining(food.expiry);
+                let badgeClass = 'bg-slate-100 text-slate-600';
+                let badgeText = `あと${days}日`;
+
+                if (days < 0) {
+                    badgeClass = 'bg-red-100 text-red-600 font-bold';
+                    badgeText = `期限切れ (${Math.abs(days)}日前)`;
+                } else if (days === 0) {
+                    badgeClass = 'bg-red-500 text-white font-bold animate-pulse';
+                    badgeText = '今日が期限！';
+                } else if (days <= 3) {
+                    badgeClass = 'bg-amber-100 text-amber-700 font-semibold';
+                    badgeText = `あと${days}日`;
+                }
+
+                return `
+                    <li class="py-3 flex items-center justify-between group">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-semibold text-slate-800 truncate text-sm">${escapeHtml(food.name)}</span>
+                                ${food.quantity ? `<span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md truncate">${escapeHtml(food.quantity)}</span>` : ''}
+                            </div>
+                            <div class="flex items-center space-x-2 mt-1">
+                                <span class="text-xs text-slate-400">期限: ${food.expiry}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full ${badgeClass}">${badgeText}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <button onclick="openEditModal('${food.id}')" class="text-slate-400 hover:text-emerald-600 p-2 transition-colors rounded-lg" title="編集">
+                                <i class="fa-regular fa-pen-to-square text-sm"></i>
+                            </button>
+                            <button onclick="deleteFood('${food.id}')" class="text-slate-300 hover:text-red-500 p-2 transition-colors rounded-lg" title="削除">
+                                <i class="fa-regular fa-trash-can text-sm"></i>
+                            </button>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        function renderExpiringAlerts() {
+            const section = document.getElementById('expiring-section');
+            const list = document.getElementById('expiring-list');
+
+            const expiringFoods = foods.filter(food => getDaysRemaining(food.expiry) <= 3)
+                                       .sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+
+            if (expiringFoods.length === 0) {
+                section.classList.add('hidden');
+                list.innerHTML = '';
+                return;
+            }
+
+            section.classList.remove('hidden');
+
+            list.innerHTML = expiringFoods.map(food => {
+                const days = getDaysRemaining(food.expiry);
+                let statusText = '';
+                let statusClass = '';
+
+                if (days < 0) {
+                    statusText = `期限切れ (${Math.abs(days)}日前)`;
+                    statusClass = 'text-red-600 font-bold';
+                } else if (days === 0) {
+                    statusText = '今日まで！';
+                    statusClass = 'text-red-600 font-bold';
+                } else {
+                    statusText = `あと${days}日`;
+                    statusClass = 'text-amber-700 font-semibold';
+                }
+
+                return `
+                    <li class="flex items-center justify-between text-xs bg-white/80 backdrop-blur-sm p-2.5 rounded-xl border border-amber-100">
+                        <div class="flex items-center space-x-2 min-w-0">
+                            <i class="fa-solid fa-circle-exclamation text-amber-500 text-xs flex-shrink-0"></i>
+                            <span class="font-bold text-slate-800 truncate">${escapeHtml(food.name)}</span>
+                            ${food.quantity ? `<span class="text-[10px] text-slate-500 bg-amber-50 px-1.5 py-0.5 rounded">${escapeHtml(food.quantity)}</span>` : ''}
+                        </div>
+                        <span class="${statusClass} ml-2 whitespace-nowrap">${statusText}</span>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        function renderShopping() {
+            const shoppingList = document.getElementById('shopping-list');
+            const shoppingEmpty = document.getElementById('shopping-empty');
+            const badge = document.getElementById('shopping-badge');
+
+            const uncheckedCount = shoppingItems.filter(i => !i.checked).length;
+            if (uncheckedCount > 0) {
+                badge.textContent = uncheckedCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            if (shoppingItems.length === 0) {
+                shoppingEmpty.classList.remove('hidden');
+                shoppingList.innerHTML = '';
+                return;
+            }
+
+            shoppingEmpty.classList.add('hidden');
+
+            shoppingList.innerHTML = shoppingItems.map(item => `
+                <li class="py-2.5 flex items-center justify-between space-x-2">
+                    <label class="flex items-center space-x-3 flex-1 min-w-0 cursor-pointer py-1">
+                        <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleShoppingItem('${item.id}')" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 transition-all cursor-pointer">
+                        <span class="text-sm ${item.checked ? 'line-through text-slate-300' : 'text-slate-700 font-medium'} truncate transition-all">
+                            ${escapeHtml(item.name)}
+                        </span>
+                    </label>
+                    <button onclick="deleteShoppingItem('${item.id}')" class="text-slate-300 hover:text-red-500 p-1.5 transition-colors">
+                        <i class="fa-regular fa-trash-can text-xs"></i>
+                    </button>
+                </li>
+            `).join('');
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    </script>
+</body>
+</html>
